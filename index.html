@@ -1,0 +1,443 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Hand, Brush, Sparkles, Zap, Crown, Heart, Star, Droplets } from 'lucide-react';
+
+const SCRUBBERS = [
+  { id: 'hand', name: 'Bare Hand', cost: 0, power: 1, icon: Hand, color: 'text-orange-200', bg: 'bg-orange-500' },
+  { id: 'brush', name: 'Soft Brush', cost: 50, power: 5, icon: Brush, color: 'text-blue-200', bg: 'bg-blue-500' },
+  { id: 'sponge', name: 'Bath Sponge', cost: 300, power: 25, icon: Sparkles, color: 'text-pink-200', bg: 'bg-pink-500' },
+  { id: 'electric', name: 'Electric Massager', cost: 2000, power: 100, icon: Zap, color: 'text-purple-200', bg: 'bg-purple-500' },
+  { id: 'golden', name: 'Golden Scrubber', cost: 15000, power: 500, icon: Crown, color: 'text-yellow-200', bg: 'bg-yellow-500' },
+  { id: 'galaxy', name: 'Galaxy Scrubber', cost: 40000, power: 5000, icon: Star, color: 'text-cyan-200', bg: 'bg-indigo-900' },
+  { id: 'hose', name: 'Garden Hose', cost: 1000000, power: 100000, icon: Droplets, color: 'text-blue-100', bg: 'bg-blue-600' }
+];
+
+export default function App() {
+  const [points, setPoints] = useState(0);
+  const [inventory, setInventory] = useState(['hand']);
+  const [activeScrubberId, setActiveScrubberId] = useState('hand');
+  const [particles, setParticles] = useState([]);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [totalScrubs, setTotalScrubs] = useState(0);
+  const [isGalaxyPug, setIsGalaxyPug] = useState(false);
+  
+  // Interaction tracking for dragging
+  const [isPointerDown, setIsPointerDown] = useState(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+  const scrubbingTimeoutRef = useRef(null);
+  
+  const particleIdCounter = useRef(0);
+
+  const currentScrubbers = SCRUBBERS.map(s => ({
+    ...s,
+    cost: isGalaxyPug ? s.cost * 2 : s.cost,
+    power: isGalaxyPug ? s.power * 2 : s.power
+  }));
+
+  const activeScrubber = currentScrubbers.find(s => s.id === activeScrubberId);
+
+  // Clear scrubbing animation state
+  const resetScrubbingState = useCallback(() => {
+    setIsScrubbing(false);
+  }, []);
+
+  const spawnParticle = (x, y, amount) => {
+    const id = particleIdCounter.current++;
+    // Add some random scatter to the position so they don't overlap perfectly
+    const scatterX = x + (Math.random() - 0.5) * 40;
+    const scatterY = y + (Math.random() - 0.5) * 40;
+    
+    setParticles(prev => [...prev, { id, x: scatterX, y: scatterY, amount }]);
+    
+    // Remove particle after animation (800ms)
+    setTimeout(() => {
+      setParticles(prev => prev.filter(p => p.id !== id));
+    }, 800);
+  };
+
+  const triggerScrub = (x, y) => {
+    setPoints(prev => prev + activeScrubber.power);
+    setTotalScrubs(prev => prev + 1);
+    spawnParticle(x, y, activeScrubber.power);
+    
+    setIsScrubbing(true);
+    
+    // Keep Pibble happy as long as you're scrubbing, reset after a short pause
+    if (scrubbingTimeoutRef.current) {
+      clearTimeout(scrubbingTimeoutRef.current);
+    }
+    scrubbingTimeoutRef.current = setTimeout(resetScrubbingState, 300);
+  };
+
+  // Pointer event handlers for the belly
+  const handlePointerDown = (e) => {
+    e.preventDefault(); // Prevent text selection/scrolling
+    setIsPointerDown(true);
+    lastPosRef.current = { x: e.clientX, y: e.clientY };
+    triggerScrub(e.clientX, e.clientY);
+    e.target.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isPointerDown) return;
+    
+    const dist = Math.hypot(e.clientX - lastPosRef.current.x, e.clientY - lastPosRef.current.y);
+    
+    // Trigger another scrub every 25 pixels of movement
+    if (dist > 25) {
+      triggerScrub(e.clientX, e.clientY);
+      lastPosRef.current = { x: e.clientX, y: e.clientY };
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    setIsPointerDown(false);
+    e.target.releasePointerCapture(e.pointerId);
+  };
+
+  const buyScrubber = (scrubber) => {
+    if (points >= scrubber.cost && !inventory.includes(scrubber.id)) {
+      setPoints(prev => prev - scrubber.cost);
+      setInventory(prev => [...prev, scrubber.id]);
+      setActiveScrubberId(scrubber.id);
+    }
+  };
+
+  const buyGalaxyPug = () => {
+    if (points >= 500000 && !isGalaxyPug) {
+      setPoints(prev => prev - 500000);
+      setIsGalaxyPug(true);
+    }
+  };
+
+  const baseColor = isGalaxyPug ? "url(#galaxyPugGrad)" : "#C19A6B";
+  const darkColor = isGalaxyPug ? "#1e1b4b" : "#A88151";
+  const bellyColor = isGalaxyPug ? "url(#galaxyBellyGrad)" : "#F4C2C2";
+  const bellyStroke = isGalaxyPug ? "#8b5cf6" : "#E5A9A9";
+  const pawColor = isGalaxyPug ? "#c4b5fd" : "#F3E5AB";
+
+  return (
+    <div className={`min-h-screen font-sans flex flex-col items-center p-4 lg:p-8 overflow-hidden select-none transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-950 text-indigo-100' : 'bg-amber-50 text-amber-950'}`}>
+      
+      {/* Dynamic CSS styles for animations */}
+      <style>{`
+        @keyframes floatUp {
+          0% { opacity: 1; transform: translateY(0) scale(1); }
+          100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
+        }
+        .particle {
+          animation: floatUp 0.8s ease-out forwards;
+        }
+        @keyframes tailWag {
+          0%, 100% { transform: rotate(0deg); }
+          50% { transform: rotate(35deg); }
+        }
+        .wagging {
+          animation: tailWag 0.15s infinite;
+          transform-origin: 20% 80%;
+        }
+        @keyframes pant {
+          0%, 100% { transform: scaleY(1); }
+          50% { transform: scaleY(1.03) scaleX(1.02); }
+        }
+        .panting {
+          animation: pant 0.8s infinite ease-in-out;
+          transform-origin: bottom center;
+        }
+        @keyframes squish {
+          0% { transform: scale(1); }
+          50% { transform: scale(0.95); }
+          100% { transform: scale(1); }
+        }
+        .belly-squish:active {
+          animation: squish 0.2s ease-in-out;
+        }
+        .galaxy-bg {
+          background: linear-gradient(45deg, #312e81, #1e1b4b, #4c1d95, #312e81);
+          background-size: 400% 400%;
+          animation: gradient 5s ease infinite;
+        }
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <header className={`w-full max-w-4xl flex flex-col md:flex-row justify-between items-center p-6 rounded-3xl shadow-xl mb-8 z-10 border transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-900 border-indigo-700 shadow-cyan-900/50' : 'bg-white border-amber-100 shadow-amber-200/50'}`}>
+        <div className="text-center md:text-left mb-4 md:mb-0">
+          <h1 className={`text-4xl font-extrabold tracking-tight flex items-center gap-3 justify-center md:justify-start ${isGalaxyPug ? 'text-cyan-100' : 'text-amber-800'}`}>
+            {isGalaxyPug ? <Star className="text-cyan-400 fill-cyan-400 animate-pulse" /> : <Heart className="text-pink-500 fill-pink-500 animate-pulse" />}
+            {isGalaxyPug ? 'Galaxy Pibble Unlimited' : 'Pibble Unlimited'}
+          </h1>
+          <p className={`font-medium mt-1 ${isGalaxyPug ? 'text-indigo-300' : 'text-amber-600'}`}>Total Scrubs: {totalScrubs.toLocaleString()}</p>
+        </div>
+        
+        <div className={`px-8 py-4 rounded-2xl border-2 transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-950 border-indigo-500' : 'bg-amber-100 border-amber-200'}`}>
+          <p className={`text-sm font-bold uppercase tracking-wider mb-1 text-center ${isGalaxyPug ? 'text-cyan-400' : 'text-amber-700'}`}>Pibble Points</p>
+          <p className={`text-4xl lg:text-5xl font-black text-center drop-shadow-sm ${isGalaxyPug ? 'text-cyan-200' : 'text-amber-600'}`}>
+            {points.toLocaleString()}
+          </p>
+        </div>
+      </header>
+
+      <div className="w-full max-w-4xl flex flex-col lg:flex-row gap-8 items-start">
+        
+        {/* Game Area (Left Side) */}
+        <div className={`flex-1 w-full rounded-3xl p-8 shadow-xl flex flex-col items-center justify-center min-h-[500px] relative overflow-visible transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-900 border-indigo-700 shadow-cyan-900/50 border' : 'bg-white border-amber-100 shadow-amber-200/50 border'}`}>
+          
+          <h2 className={`text-2xl font-bold mb-6 text-center ${isGalaxyPug ? 'text-cyan-200' : 'text-amber-700'}`}>
+            {isScrubbing ? "Oh yeah, that's the spot!" : "Scrub Pibble's Belly!"}
+          </h2>
+
+          {/* Floating Particles */}
+          {particles.map(p => (
+            <div
+              key={p.id}
+              className={`particle fixed pointer-events-none text-2xl font-black drop-shadow-md z-50 flex items-center gap-1 ${activeScrubberId === 'galaxy' ? 'text-cyan-400' : 'text-pink-500'}`}
+              style={{ left: p.x - 20, top: p.y - 20 }}
+            >
+              +{p.amount} {activeScrubberId === 'galaxy' ? <Star className="w-5 h-5 fill-cyan-400 text-cyan-400" /> : <Heart className="w-5 h-5 fill-pink-500 text-pink-500" />}
+            </div>
+          ))}
+
+          {/* Pibble the Pug SVG */}
+          <div className={`relative w-64 h-80 sm:w-80 sm:h-96 ${isScrubbing ? 'panting' : ''}`}>
+            <svg 
+              viewBox="0 0 200 240" 
+              className="w-full h-full drop-shadow-2xl"
+              style={{ filter: isGalaxyPug ? "drop-shadow(0px 10px 25px rgba(34, 211, 238, 0.4))" : "drop-shadow(0px 10px 15px rgba(217, 119, 6, 0.2))" }}
+            >
+              <defs>
+                <linearGradient id="galaxyPugGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#4c1d95" />
+                  <stop offset="50%" stopColor="#312e81" />
+                  <stop offset="100%" stopColor="#1e1b4b" />
+                </linearGradient>
+                <radialGradient id="galaxyBellyGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#4c1d95" />
+                </radialGradient>
+              </defs>
+              <g>
+                {/* Tail */}
+                <path 
+                  d="M140,160 C180,140 170,100 150,110 C130,120 140,150 150,140" 
+                  fill="none" 
+                  stroke={baseColor} 
+                  strokeWidth="12" 
+                  strokeLinecap="round"
+                  className={isScrubbing ? "wagging" : ""}
+                />
+                
+                {/* Back Legs */}
+                <rect x="50" y="180" width="25" height="40" rx="12" fill={darkColor} />
+                <rect x="125" y="180" width="25" height="40" rx="12" fill={darkColor} />
+
+                {/* Body */}
+                <ellipse cx="100" cy="150" rx="65" ry="75" fill={baseColor} />
+
+                {/* BELLY (The interactive zone) */}
+                <g 
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerLeave={handlePointerUp}
+                  className="cursor-pointer belly-squish touch-none"
+                  style={{ touchAction: 'none' }}
+                >
+                  <ellipse 
+                    cx="100" cy="165" 
+                    rx="45" ry="50" 
+                    fill={bellyColor} 
+                    stroke={bellyStroke} 
+                    strokeWidth="3"
+                  />
+                  {/* Belly button/details */}
+                  <circle cx="100" cy="180" r="3" fill={bellyStroke} />
+                  <path d="M 80,150 Q 100,160 120,150" fill="none" stroke={bellyStroke} strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
+                  <path d="M 85,165 Q 100,175 115,165" fill="none" stroke={bellyStroke} strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
+                  
+                  {/* Invisible larger hit area for easier clicking/dragging on mobile */}
+                  <ellipse cx="100" cy="165" rx="60" ry="65" fill="transparent" />
+                </g>
+
+                {/* Front Legs */}
+                <rect x="65" y="195" width="22" height="35" rx="11" fill={baseColor} />
+                <rect x="113" y="195" width="22" height="35" rx="11" fill={baseColor} />
+                {/* Paws */}
+                <ellipse cx="76" cy="225" rx="14" ry="8" fill={pawColor} />
+                <ellipse cx="124" cy="225" rx="14" ry="8" fill={pawColor} />
+
+                {/* Head */}
+                <circle cx="100" cy="80" r="55" fill={baseColor} />
+                
+                {/* Forehead wrinkles */}
+                <path d="M 80,45 Q 100,55 120,45" fill="none" stroke={darkColor} strokeWidth="3" strokeLinecap="round" />
+                <path d="M 70,55 Q 100,65 130,55" fill="none" stroke={darkColor} strokeWidth="3" strokeLinecap="round" />
+
+                {/* Ears */}
+                <path d="M 45,60 C 20,40 10,80 30,100 C 40,110 50,90 50,80 Z" fill="#2B2B2B" />
+                <path d="M 155,60 C 180,40 190,80 170,100 C 160,110 150,90 150,80 Z" fill="#2B2B2B" />
+
+                {/* Mask / Muzzle */}
+                <ellipse cx="100" cy="100" rx="35" ry="25" fill="#2B2B2B" />
+                
+                {/* Nose */}
+                <ellipse cx="100" cy="92" rx="8" ry="5" fill="#000" />
+                <path d="M 98,90 Q 100,92 102,90" fill="none" stroke="#444" strokeWidth="1" />
+
+                {/* Mouth & Tongue */}
+                {isScrubbing ? (
+                  <g>
+                    <path d="M 85,105 Q 100,120 115,105" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" />
+                    {/* Happy Tongue */}
+                    <path d="M 92,112 C 92,130 108,130 108,112 Z" fill="#FF7F7F" />
+                    <path d="M 100,112 L 100,125" fill="none" stroke="#CC4444" strokeWidth="1.5" />
+                  </g>
+                ) : (
+                  <path d="M 90,105 Q 100,115 110,105" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" />
+                )}
+
+                {/* Eyes */}
+                {isScrubbing ? (
+                  <g>
+                    {/* Closed Happy Eyes */}
+                    <path d="M 60,85 Q 70,75 80,85" fill="none" stroke="#2B2B2B" strokeWidth="4" strokeLinecap="round" />
+                    <path d="M 120,85 Q 130,75 140,85" fill="none" stroke="#2B2B2B" strokeWidth="4" strokeLinecap="round" />
+                  </g>
+                ) : (
+                  <g>
+                    {/* Open Eyes */}
+                    <circle cx="70" cy="80" r="12" fill="#2B2B2B" />
+                    <circle cx="130" cy="80" r="12" fill="#2B2B2B" />
+                    <circle cx="73" cy="77" r="4" fill="#FFF" />
+                    <circle cx="127" cy="77" r="4" fill="#FFF" />
+                  </g>
+                )}
+              </g>
+            </svg>
+          </div>
+
+          <div className={`mt-8 flex items-center justify-center gap-3 font-semibold px-6 py-3 rounded-full border transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-950 border-indigo-700 text-cyan-300' : 'bg-amber-50 border-amber-100 text-amber-500'}`}>
+            <ActiveIcon activeScrubber={activeScrubber} />
+            Equipped: {activeScrubber.name} (+{activeScrubber.power.toLocaleString()} pts)
+          </div>
+
+          <div className={`text-sm mt-4 text-center ${isGalaxyPug ? 'text-indigo-400' : 'text-amber-400'}`}>
+            Tip: You can click and drag across the belly to scrub faster!
+          </div>
+
+        </div>
+
+        {/* Shop Area (Right Side) */}
+        <div className={`w-full lg:w-96 rounded-3xl p-6 md:p-8 shadow-xl flex-shrink-0 transition-colors duration-1000 ${isGalaxyPug ? 'bg-indigo-900 border-indigo-700 shadow-cyan-900/50 border' : 'bg-white border-amber-100 shadow-amber-200/50 border'}`}>
+          <h2 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isGalaxyPug ? 'text-cyan-100' : 'text-amber-800'}`}>
+            Scrubber Shop
+          </h2>
+          
+          {!isGalaxyPug && (
+            <div className="mb-6 p-5 rounded-2xl bg-indigo-900 text-white shadow-lg border border-indigo-500 relative overflow-hidden group">
+               <div className="absolute inset-0 galaxy-bg opacity-40 group-hover:opacity-60 transition-opacity"></div>
+               <div className="relative z-10 flex flex-col items-center text-center">
+                 <Star className="text-cyan-400 w-8 h-8 mb-2 animate-pulse" />
+                 <h3 className="font-bold text-lg text-cyan-200 mb-1">Cosmic Ascension</h3>
+                 <p className="text-sm text-indigo-200 mb-4 leading-tight">Unlock the Galaxy Pug! Multiplies the cost and power of all scrubbers by 2x!</p>
+                 <button
+                   disabled={points < 500000}
+                   onClick={buyGalaxyPug}
+                   className={`px-5 py-2.5 rounded-full font-bold text-sm tracking-wide transition-all ${
+                     points >= 500000
+                       ? 'bg-cyan-500 hover:bg-cyan-400 text-indigo-950 shadow-[0_0_15px_rgba(34,211,238,0.6)] hover:shadow-[0_0_25px_rgba(34,211,238,0.8)] scale-105'
+                       : 'bg-indigo-950/80 text-indigo-400 border border-indigo-800 cursor-not-allowed'
+                   }`}
+                 >
+                   {points >= 500000 ? 'Ascend (500,000 pts)' : 'Requires 500,000 pts'}
+                 </button>
+               </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {currentScrubbers.map((item) => {
+              const isOwned = inventory.includes(item.id);
+              const isEquipped = activeScrubberId === item.id;
+              const canAfford = points >= item.cost;
+              const Icon = item.icon;
+              const isGalaxy = item.id === 'galaxy';
+
+              return (
+                <div 
+                  key={item.id} 
+                  className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
+                    isEquipped ? (isGalaxy ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)] scale-[1.02]' : 'border-pink-500 bg-pink-50 shadow-md scale-[1.02]') : 
+                    isOwned ? (isGalaxyPug ? 'border-indigo-600 bg-indigo-800/50 hover:border-indigo-400' : 'border-amber-200 bg-white hover:border-amber-300') : 
+                    canAfford ? (isGalaxyPug ? 'border-green-500/50 bg-green-900/20 hover:bg-green-900/40 cursor-pointer' : 'border-green-200 bg-green-50/50 hover:bg-green-50 hover:shadow-md cursor-pointer') : 
+                    (isGalaxyPug ? 'border-indigo-950 bg-indigo-950/50 opacity-60' : 'border-gray-100 bg-gray-50 opacity-80')
+                  } ${isEquipped && isGalaxy ? 'galaxy-bg' : ''}`}
+                  onClick={() => {
+                    if (isOwned) {
+                      setActiveScrubberId(item.id);
+                    } else if (canAfford) {
+                      buyScrubber(item);
+                    }
+                  }}
+                >
+                  <div className={`p-4 flex items-center gap-4 ${isEquipped && isGalaxy ? 'text-white' : ''}`}>
+                    <div className={`p-3 rounded-xl flex-shrink-0 ${item.bg} ${item.color} shadow-inner`}>
+                      <Icon size={24} className={isGalaxy && isEquipped ? 'animate-spin-slow' : ''} />
+                    </div>
+                    
+                    <div className="flex-1">
+                      <h3 className={`font-bold text-lg leading-tight ${isEquipped && isGalaxy ? 'text-white drop-shadow-md' : (isGalaxyPug ? 'text-indigo-100' : 'text-amber-900')}`}>{item.name}</h3>
+                      <p className={`text-sm font-medium ${isEquipped && isGalaxy ? 'text-cyan-200' : (isGalaxyPug ? 'text-indigo-300' : 'text-amber-600')}`}>+{item.power.toLocaleString()} pts / scrub</p>
+                    </div>
+
+                    <div className="flex-shrink-0 text-right">
+                      {isEquipped ? (
+                        <span className={`${isGalaxy ? 'bg-cyan-500 text-white' : 'bg-pink-500 text-white'} text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-sm`}>
+                          Equipped
+                        </span>
+                      ) : isOwned ? (
+                        <button className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full transition-colors ${isGalaxyPug ? 'bg-indigo-800 text-indigo-200 hover:bg-indigo-700' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
+                          Equip
+                        </button>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                          <span className={`text-sm font-bold ${canAfford ? (isGalaxyPug ? 'text-green-400' : 'text-green-600') : (isGalaxyPug ? 'text-indigo-400' : 'text-gray-400')}`}>
+                            {item.cost.toLocaleString()} pts
+                          </span>
+                          <button 
+                            disabled={!canAfford}
+                            className={`mt-1 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full transition-colors ${
+                              canAfford 
+                                ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm' 
+                                : (isGalaxyPug ? 'bg-indigo-950 text-indigo-700 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed')
+                            }`}
+                          >
+                            Buy
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// Helper component to render the icon of the currently active scrubber
+function ActiveIcon({ activeScrubber }) {
+  const Icon = activeScrubber.icon;
+  return (
+    <div className={`p-1.5 rounded-lg ${activeScrubber.bg} ${activeScrubber.color}`}>
+      <Icon size={16} />
+    </div>
+  );
+}
